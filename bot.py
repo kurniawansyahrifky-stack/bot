@@ -1,4 +1,5 @@
-import asyncio
+        import asyncio
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
@@ -9,14 +10,14 @@ from telegram.constants import ChatMemberStatus
 from telegram.error import BadRequest
 
 # ================== TOKEN ==================
-BOT_TOKEN = "8247822535:AAHzZ2XGHcudqwHKJPPeHN050F4gOmduC0k"
+BOT_TOKEN = os.getenv("8247822535:AAHzZ2XGHcudqwHKJPPeHN050F4gOmduC0k")
 
 # ================== CONFIG =================
-BATCH_SIZE = 5      # 5 user per tag
-DELAY = 5           # delay detik
+BATCH_SIZE = 5
+DELAY = 5
 
 # ================== MEMORY =================
-MEMBER_CACHE = {}          # member aktif
+MEMBER_CACHE = {}
 TAGALL_RUNNING = {}
 
 WELCOME_ENABLED = True
@@ -35,10 +36,10 @@ async def is_admin(update, context):
         update.effective_chat.id,
         update.effective_user.id
     )
-    return m.status in [
+    return m.status in (
         ChatMemberStatus.ADMINISTRATOR,
         ChatMemberStatus.OWNER
-    ]
+    )
 
 def cache_user(chat_id, user_id):
     MEMBER_CACHE.setdefault(chat_id, set()).add(user_id)
@@ -49,8 +50,9 @@ async def capture_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     cache_user(chat_id, user.id)
 
+    global WELCOME_TEXT
+
     if chat_id in WAIT_TEXT:
-        global WELCOME_TEXT
         WELCOME_TEXT = update.message.text
         WAIT_TEXT.remove(chat_id)
         await update.message.reply_text("✅ Teks welcome disimpan")
@@ -69,8 +71,9 @@ async def capture_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def capture_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    global WELCOME_PHOTO
+
     if chat_id in WAIT_PHOTO:
-        global WELCOME_PHOTO
         WELCOME_PHOTO = update.message.photo[-1].file_id
         WAIT_PHOTO.remove(chat_id)
         await update.message.reply_text("✅ Foto welcome disimpan")
@@ -99,10 +102,7 @@ async def capture_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=markup
             )
         else:
-            await update.message.reply_text(
-                text,
-                reply_markup=markup
-            )
+            await update.message.reply_text(text, reply_markup=markup)
 
 # ================== TAGALL ==================
 async def run_tagall(chat_id, context):
@@ -113,7 +113,7 @@ async def run_tagall(chat_id, context):
         if not TAGALL_RUNNING.get(chat_id):
             break
 
-        batch = members[i:i+BATCH_SIZE]
+        batch = members[i:i + BATCH_SIZE]
         mentions = " ".join(
             f"[👤](tg://user?id={uid})" for uid in batch
         )
@@ -130,7 +130,18 @@ async def run_tagall(chat_id, context):
     TAGALL_RUNNING[chat_id] = False
     await context.bot.send_message(chat_id, "✅ Tagall selesai")
 
-# ================== COMMAND ADMIN ==================
+# ================== COMMAND ==================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = [
+        [InlineKeyboardButton("🔔 Tagall", callback_data="tagall")],
+        [InlineKeyboardButton("🎉 Welcome Setting", callback_data="welcome")],
+        [InlineKeyboardButton("⛔ Stop Tagall", callback_data="stop")],
+    ]
+    await update.message.reply_text(
+        "🤖 PANEL BOT ADMIN",
+        reply_markup=InlineKeyboardMarkup(kb)
+    )
+
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("❌ Khusus admin")
@@ -152,7 +163,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = member.user
 
     if not user:
-        return await update.message.reply_text("⚠️ Reply pesan atau pakai username")
+        return await update.message.reply_text("⚠️ Reply pesan / username")
 
     try:
         await context.bot.promote_chat_member(
@@ -164,63 +175,38 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             can_invite_users=True
         )
         await context.bot.set_chat_administrator_custom_title(
-            chat_id,
-            user.id,
-            title
+            chat_id, user.id, title
         )
         await update.message.reply_text(
             f"✅ {user.first_name} jadi admin\n🏷️ {title}"
         )
     except BadRequest as e:
-        await update.message.reply_text(f"❌ Gagal: {e.message}")
+        await update.message.reply_text(f"❌ {e.message}")
 
-# ================== COMMAND KICK ==================
 async def kick_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("❌ Khusus admin")
 
-    chat_id = update.effective_chat.id
-    user = None
+    if not update.message.reply_to_message:
+        return await update.message.reply_text("⚠️ Reply user")
 
-    if update.message.reply_to_message:
-        user = update.message.reply_to_message.from_user
-    elif context.args:
-        username = context.args[0].replace("@", "")
-        member = await context.bot.get_chat_member(chat_id, f"@{username}")
-        user = member.user
-
-    if not user:
-        return await update.message.reply_text("⚠️ Reply pesan atau pakai username")
-
-    await context.bot.ban_chat_member(chat_id, user.id)
-    await context.bot.unban_chat_member(chat_id, user.id)
+    user = update.message.reply_to_message.from_user
+    await context.bot.ban_chat_member(update.effective_chat.id, user.id)
+    await context.bot.unban_chat_member(update.effective_chat.id, user.id)
     await update.message.reply_text(f"👢 {user.first_name} dikeluarkan")
 
-# ================== COMMAND PIN ==================
 async def pin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await update.message.reply_text("❌ Khusus admin")
 
     if not update.message.reply_to_message:
-        return await update.message.reply_text("⚠️ Reply pesan yang mau dipin")
+        return await update.message.reply_text("⚠️ Reply pesan")
 
     await context.bot.pin_chat_message(
         update.effective_chat.id,
         update.message.reply_to_message.message_id
     )
     await update.message.reply_text("📌 Pesan dipin")
-
-# ================== PANEL ==================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = [
-        [InlineKeyboardButton("🔔 Tagall", callback_data="tagall")],
-        [InlineKeyboardButton("🎉 Welcome Setting", callback_data="welcome")],
-        [InlineKeyboardButton("⛔ Stop Tagall", callback_data="stop")],
-    ]
-    await update.message.reply_text(
-        "🤖 PANEL BOT ADMIN",
-        reply_markup=InlineKeyboardMarkup(kb)
-    )
 
 # ================== BUTTON ==================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -231,9 +217,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return await q.message.reply_text("❌ Khusus admin")
 
+    global WELCOME_ENABLED
+
     if q.data == "tagall":
-        await q.message.reply_text("🔔 Tagall dimulai")
         asyncio.create_task(run_tagall(chat_id, context))
+        await q.message.reply_text("🔔 Tagall dimulai")
 
     elif q.data == "stop":
         TAGALL_RUNNING[chat_id] = False
@@ -253,7 +241,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif q.data == "w_toggle":
-        global WELCOME_ENABLED
         WELCOME_ENABLED = not WELCOME_ENABLED
         await q.message.reply_text(
             f"Welcome {'ON' if WELCOME_ENABLED else 'OFF'}"
@@ -286,10 +273,10 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
 
     app.add_handler(
-        MessageHandler(filters.TEXT & filters.ChatType.GROUP, capture_text)
+        MessageHandler(filters.TEXT & filters.ChatType.GROUPS, capture_text)
     )
     app.add_handler(
-        MessageHandler(filters.PHOTO & filters.ChatType.GROUP, capture_photo)
+        MessageHandler(filters.PHOTO & filters.ChatType.GROUPS, capture_photo)
     )
     app.add_handler(
         MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, capture_join)
