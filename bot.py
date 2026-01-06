@@ -9,7 +9,7 @@ from telegram.constants import ChatMemberStatus
 from telegram.error import BadRequest
 
 # ================== TOKEN ==================
-BOT_TOKEN = "8147042744:AAHpIY9FXmBkYLC2v8xvwihE8JVZfCPY-bQ"
+BOT_TOKEN = "8247822535:AAHzZ2XGHcudqwHKJPPeHN050F4gOmduC0k"
 
 # ================== CONFIG =================
 BATCH_SIZE = 5      # 5 user per tag
